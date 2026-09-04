@@ -44,10 +44,12 @@ func (a *Agent) Run(ctx context.Context) (string, error) {
 	defer cancel()
 
 	systemPrompt := prompt.BuildSystem(a.cfg)
+	a.mu.Lock()
 	a.msgs = []llm.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: prompt.BuildUserPrompt()},
 	}
+	a.mu.Unlock()
 
 	result, err := a.loop(ctx)
 	if err != nil {
@@ -76,7 +78,11 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 			a.compact(ctx)
 		}
 
-		resp, err := a.client.Chat(ctx, a.msgs, toolDefs)
+		a.mu.Lock()
+		msgsCopy := make([]llm.Message, len(a.msgs))
+		copy(msgsCopy, a.msgs)
+		resp, err := a.client.Chat(ctx, msgsCopy, toolDefs)
+		a.mu.Unlock()
 		if err != nil {
 			return "", fmt.Errorf("LLM error: %w", err)
 		}
@@ -88,7 +94,10 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 		if len(resp.ToolCalls) > 0 {
 			assistantMsg.ToolCalls = resp.ToolCalls
 		}
+
+		a.mu.Lock()
 		a.msgs = append(a.msgs, assistantMsg)
+		a.mu.Unlock()
 
 		if len(resp.ToolCalls) == 0 {
 			return resp.Content, nil
@@ -100,11 +109,13 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 				result = fmt.Sprintf("ERROR: %v", err)
 			}
 
+			a.mu.Lock()
 			a.msgs = append(a.msgs, llm.Message{
 				Role:       "tool",
 				Content:    result,
 				ToolCallID: tc.ID,
 			})
+			a.mu.Unlock()
 		}
 	}
 }
