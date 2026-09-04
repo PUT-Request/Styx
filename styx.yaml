@@ -7,8 +7,14 @@ prompt: |
   - Code quality and maintainability
   
   Check all Go files in internal/ and cmd/ directories.
-  Create a branch for any fixes found.
-  End with a summary of all issues discovered.
+  For each issue found:
+  - Use `git checkout -b styx/fix-<issue-name>` to create a feature branch
+  - Fix the issue in the code
+  - Use `git add .` and `git commit -m "fix: <description>"` to commit
+  - Use `git push origin styx/fix-<issue-name>` to push the branch
+  - Switch back to master with `git checkout master`
+  
+  When done, print a summary of all branches created and fixes applied.
 
 mode: read_write
 
@@ -17,9 +23,9 @@ api_key: ${STYX_API_KEY}
 model: nemotron-3.5-lightning-free
 max_context: 256000
 
-verification_regex: "SUMMARY:.+"
+disable_regex: true
 
 max_working_time: 20m
 
-save_log: true
+save_log: false
 send_log: false
