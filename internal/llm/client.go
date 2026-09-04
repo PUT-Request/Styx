@@ -12,8 +12,10 @@ import (
 )
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 type ToolCall struct {
@@ -88,10 +90,24 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Respo
 func (c *Client) doChat(ctx context.Context, msgs []Message, tools []Tool) (*Response, error) {
 	openaiMsgs := make([]openai.ChatCompletionMessage, 0, len(msgs))
 	for _, m := range msgs {
-		openaiMsgs = append(openaiMsgs, openai.ChatCompletionMessage{
-			Role:    m.Role,
-			Content: m.Content,
-		})
+		msg := openai.ChatCompletionMessage{
+			Role:       m.Role,
+			Content:    m.Content,
+			ToolCallID: m.ToolCallID,
+		}
+		if len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				msg.ToolCalls = append(msg.ToolCalls, openai.ToolCall{
+					ID:   tc.ID,
+					Type: openai.ToolTypeFunction,
+					Function: openai.FunctionCall{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+		}
+		openaiMsgs = append(openaiMsgs, msg)
 	}
 
 	req := openai.ChatCompletionRequest{

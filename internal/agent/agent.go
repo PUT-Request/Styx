@@ -120,10 +120,14 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 
 		a.log.Add(fmt.Sprintf("Assistant: %s", truncate(resp.Content, 200)))
 
-		a.msgs = append(a.msgs, llm.Message{
+		assistantMsg := llm.Message{
 			Role:    "assistant",
 			Content: resp.Content,
-		})
+		}
+		if len(resp.ToolCalls) > 0 {
+			assistantMsg.ToolCalls = resp.ToolCalls
+		}
+		a.msgs = append(a.msgs, assistantMsg)
 
 		if a.cfg.CompiledRegex != nil && a.cfg.CompiledRegex.MatchString(resp.Content) {
 			return resp.Content, nil
@@ -146,8 +150,9 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 			}
 
 			a.msgs = append(a.msgs, llm.Message{
-				Role:    "tool",
-				Content: result,
+				Role:       "tool",
+				Content:    result,
+				ToolCallID: tc.ID,
 			})
 		}
 	}
