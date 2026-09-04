@@ -12,7 +12,8 @@ prompt: |
   - Fix the issue in the code
   - Use `git add .` and `git commit -m "fix: <description>"` to commit
   - Use `git push origin styx/fix-<issue-name>` to push the branch
-   make sure i can access rhe branch in github verify it before stopping
+  - Verify the branch exists on GitHub using `gh api repos/PUT-Request/Styx/branches/styx/fix-<issue-name>`
+  - If push fails, report the error and DO NOT continue to the next fix
   - Switch back to master with `git checkout master`
   
   When done, print a summary of all branches created and fixes applied.

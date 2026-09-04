@@ -33,8 +33,9 @@ func BuildSystem(cfg *config.Config) string {
 	sb.WriteString("1. Use todos to track progress on complex tasks\n")
 	sb.WriteString("2. When modifying code, create a new git branch first (e.g., `git checkout -b styx/task-name`)\n")
 	sb.WriteString("3. NEVER commit directly to main or master branch\n")
-	sb.WriteString("4. You have git tools available via bash — use them for all version control\n")
-	sb.WriteString("5. You may spawn sub-agents for parallel work via the spawn_agent tool\n")
+	sb.WriteString("4. Use the `gh` CLI for all GitHub operations (PRs, issues, repos, actions)\n")
+	sb.WriteString("5. After creating or modifying anything via `gh`, always verify the result using `gh` (e.g. `gh pr view`, `gh issue list`)\n")
+	sb.WriteString("6. You may spawn sub-agents for parallel work via the spawn_agent tool\n")
 
 	sb.WriteString("\n## Final Requirement\n\n")
 	sb.WriteString("When your task is complete, clearly state what was accomplished in your final message.\n")

@@ -47,3 +47,9 @@ Defaults can be specified: `${VAR:-default_value}`
 - Git changes must be made on feature branches, never directly to main/master
 - When context reaches 90% capacity, it auto-compacts with a summary
 - Agent fails fast on timeout
+
+## License
+
+Non-Commercial License — Copyright (c) 2026 PUT Request
+
+Free for personal and CI/CD use. **Not for commercial use** — you may not sell this software or use it as the backend for a SaaS product. For commercial licensing inquiries, contact: PUT@fmhy

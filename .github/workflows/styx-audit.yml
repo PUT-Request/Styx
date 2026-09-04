@@ -7,11 +7,24 @@ on:
   schedule:
     - cron: '0 0 * * 1'
 
+permissions:
+  contents: write
+
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup git credentials
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+      - name: Install and auth gh CLI
+        run: |
+          sudo apt-get install -y gh
+          echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token
 
       - name: Download Styx binary
         run: |
