@@ -3,9 +3,9 @@ package llm
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
-	"os"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -62,7 +62,7 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Respo
 			jitter := time.Duration(float64(backoff) * (0.5 + rand.Float64()*0.5))
 			sleep := time.Duration(math.Min(float64(jitter), float64(maxBackoff)))
 
-			fmt.Fprintf(os.Stderr, "Retry %d/%d after %s (error: %v)\n", attempt, maxAttempts-1, sleep, lastErr)
+			log.Printf("Retry %d/%d after %s (error: %v)", attempt, maxAttempts-1, sleep, lastErr)
 
 			select {
 			case <-ctx.Done():
