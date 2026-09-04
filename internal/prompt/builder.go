@@ -36,15 +36,8 @@ func BuildSystem(cfg *config.Config) string {
 	sb.WriteString("4. You have git tools available via bash — use them for all version control\n")
 	sb.WriteString("5. You may spawn sub-agents for parallel work via the spawn_agent tool\n")
 
-	if cfg.CompiledRegex != nil {
-		sb.WriteString("\n## Final Requirement\n\n")
-		sb.WriteString("When your task is complete, your final message MUST contain output matching this regex:\n")
-		sb.WriteString(fmt.Sprintf("```\n%s\n```\n", cfg.VerificationRegex))
-		sb.WriteString("The agent loop will terminate once this pattern is detected in your response.\n")
-	} else {
-		sb.WriteString("\n## Final Requirement\n\n")
-		sb.WriteString("When your task is complete, clearly state what was accomplished in your final message.\n")
-	}
+	sb.WriteString("\n## Final Requirement\n\n")
+	sb.WriteString("When your task is complete, clearly state what was accomplished in your final message.\n")
 
 	sb.WriteString("\n## Context Management\n\n")
 	sb.WriteString("If you receive a compacted context summary, continue working from where you left off. ")

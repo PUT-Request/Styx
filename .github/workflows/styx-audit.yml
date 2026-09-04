@@ -23,11 +23,3 @@ jobs:
           STYX_API_ENDPOINT: ${{ secrets.STYX_API_ENDPOINT }}
           STYX_API_KEY: ${{ secrets.STYX_API_KEY }}
         run: ./styx --run styx.yaml
-
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: styx-audit-log
-          path: log.md
-          retention-days: 30

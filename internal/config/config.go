@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"regexp"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -17,22 +16,16 @@ const (
 )
 
 type Config struct {
-	Prompt            string `yaml:"prompt"`
-	Mode              Mode   `yaml:"mode"`
-	APIEndpoint       string `yaml:"api_endpoint"`
-	APIKey            string `yaml:"api_key"`
-	Model             string `yaml:"model"`
-	MaxContext        int    `yaml:"max_context"`
-	VerificationRegex string `yaml:"verification_regex"`
-	DisableRegex      bool   `yaml:"disable_regex"`
-	MaxWorkingTime    string `yaml:"max_working_time"`
-	SaveLog           bool   `yaml:"save_log"`
-	SendLog           bool   `yaml:"send_log"`
-	WebhookURL        string `yaml:"webhook_url"`
+	Prompt         string `yaml:"prompt"`
+	Mode           Mode   `yaml:"mode"`
+	APIEndpoint    string `yaml:"api_endpoint"`
+	APIKey         string `yaml:"api_key"`
+	Model          string `yaml:"model"`
+	MaxContext     int    `yaml:"max_context"`
+	MaxWorkingTime string `yaml:"max_working_time"`
 
 	// Parsed fields
-	CompiledRegex *regexp.Regexp
-	MaxDuration   time.Duration
+	MaxDuration time.Duration
 }
 
 func Load(path string) (*Config, error) {
@@ -60,7 +53,6 @@ func Load(path string) (*Config, error) {
 	// Expand env vars
 	cfg.APIEndpoint = expandEnv(cfg.APIEndpoint)
 	cfg.APIKey = expandEnv(cfg.APIKey)
-	cfg.WebhookURL = expandEnv(cfg.WebhookURL)
 
 	// Validate
 	if cfg.Prompt == "" {
@@ -74,15 +66,6 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Model == "" {
 		return nil, fmt.Errorf("model is required")
-	}
-
-	// Parse regex (only if not disabled)
-	if cfg.VerificationRegex != "" && !cfg.DisableRegex {
-		re, err := regexp.Compile(cfg.VerificationRegex)
-		if err != nil {
-			return nil, fmt.Errorf("invalid verification_regex: %w", err)
-		}
-		cfg.CompiledRegex = re
 	}
 
 	// Parse duration

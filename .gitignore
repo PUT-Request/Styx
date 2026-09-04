@@ -19,9 +19,6 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Logs
-log.md
-
 # Environment
 .env
 .env.local

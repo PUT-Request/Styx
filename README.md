@@ -19,12 +19,7 @@ go build -o styx ./cmd/styx
 | `api_key` | Yes | API key. Supports `${ENV_VAR}` expansion |
 | `model` | Yes | Model name |
 | `max_context` | No | Max context window in tokens (default: 128000) |
-| `verification_regex` | No | Regex pattern the agent must output to complete |
-| `disable_regex` | No | If `true`, skip regex verification — agent finishes when it stops calling tools |
 | `max_working_time` | No | Max duration (default: `30m`) |
-| `save_log` | No | Save `log.md` with full run transcript |
-| `send_log` | No | Send `log.md` to Discord webhook |
-| `webhook_url` | No | Discord webhook URL. Supports `${ENV_VAR}` expansion |
 
 ## Tools
 
@@ -45,22 +40,10 @@ Any config value can reference environment variables:
 
 ```yaml
 api_key: ${OPENAI_API_KEY}
-webhook_url: ${DISCORD_WEBHOOK_URL}
 ```
 
 Defaults can be specified: `${VAR:-default_value}`
 
-## Regex Verification
-
-By default, the agent loop runs until the model output matches `verification_regex`. To run without regex enforcement:
-
-```yaml
-disable_regex: true
-```
-
-With this set, the agent finishes when it responds without any tool calls.
-
 - Git changes must be made on feature branches, never directly to main/master
 - When context reaches 90% capacity, it auto-compacts with a summary
-- Agent fails fast on timeout or if regex not matched
-- API calls retry with exponential backoff
+- Agent fails fast on timeout

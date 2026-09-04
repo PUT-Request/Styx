@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,28 +19,9 @@ type Agent struct {
 	registry  *tools.ToolRegistry
 	todoMgr   *tools.TodoManager
 	msgs      []llm.Message
-	log       *Log
 	mu        sync.Mutex
 	startTime time.Time
 	isSub     bool
-}
-
-type Log struct {
-	entries []string
-	mu      sync.Mutex
-}
-
-func (l *Log) Add(entry string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	l.entries = append(l.entries, fmt.Sprintf("[%s] %s", timestamp, entry))
-}
-
-func (l *Log) String() string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return strings.Join(l.entries, "\n")
 }
 
 func New(cfg *config.Config) *Agent {
@@ -55,7 +34,6 @@ func New(cfg *config.Config) *Agent {
 		client:   llm.NewClient(cfg.APIKey, cfg.APIEndpoint, cfg.Model),
 		registry: registry,
 		todoMgr:  todoMgr,
-		log:      &Log{entries: []string{}},
 	}
 }
 
@@ -71,24 +49,9 @@ func (a *Agent) Run(ctx context.Context) (string, error) {
 		{Role: "user", Content: prompt.BuildUserPrompt()},
 	}
 
-	a.log.Add("Agent started")
-	a.log.Add(fmt.Sprintf("Task: %s", a.cfg.Prompt))
-	a.log.Add(fmt.Sprintf("Mode: %s", a.cfg.Mode))
-	a.log.Add(fmt.Sprintf("Model: %s", a.cfg.Model))
-
 	result, err := a.loop(ctx)
 	if err != nil {
-		a.log.Add(fmt.Sprintf("Agent failed: %v", err))
 		return "", err
-	}
-
-	a.log.Add(fmt.Sprintf("Agent completed in %s", time.Since(a.startTime)))
-	a.log.Add(fmt.Sprintf("Result: %s", result))
-
-	if a.cfg.SaveLog {
-		if err := a.saveLog(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to save log: %v\n", err)
-		}
 	}
 
 	return result, nil
@@ -118,8 +81,6 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 			return "", fmt.Errorf("LLM error: %w", err)
 		}
 
-		a.log.Add(fmt.Sprintf("Assistant: %s", truncate(resp.Content, 200)))
-
 		assistantMsg := llm.Message{
 			Role:    "assistant",
 			Content: resp.Content,
@@ -129,14 +90,7 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 		}
 		a.msgs = append(a.msgs, assistantMsg)
 
-		if a.cfg.CompiledRegex != nil && a.cfg.CompiledRegex.MatchString(resp.Content) {
-			return resp.Content, nil
-		}
-
 		if len(resp.ToolCalls) == 0 {
-			if a.cfg.CompiledRegex != nil {
-				return "", fmt.Errorf("agent finished without matching verification regex")
-			}
 			return resp.Content, nil
 		}
 
@@ -144,9 +98,6 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 			result, err := a.executeTool(ctx, tc)
 			if err != nil {
 				result = fmt.Sprintf("ERROR: %v", err)
-				a.log.Add(fmt.Sprintf("Tool %s error: %v", tc.Name, err))
-			} else {
-				a.log.Add(fmt.Sprintf("Tool %s: %s", tc.Name, truncate(result, 200)))
 			}
 
 			a.msgs = append(a.msgs, llm.Message{
@@ -172,21 +123,14 @@ func (a *Agent) executeTool(ctx context.Context, tc llm.ToolCall) (string, error
 }
 
 func (a *Agent) spawnSubAgent(ctx context.Context, task string) (string, error) {
-	a.log.Add(fmt.Sprintf("Spawning sub-agent for task: %s", task))
-
 	subCfg := *a.cfg
 	subCfg.Prompt = task
-	subCfg.VerificationRegex = ""
-	subCfg.CompiledRegex = nil
-	subCfg.SaveLog = false
-	subCfg.SendLog = false
 
 	sub := &Agent{
 		cfg:      &subCfg,
 		client:   a.client,
 		registry: a.registry,
 		todoMgr:  a.todoMgr,
-		log:      a.log,
 		isSub:    true,
 	}
 
@@ -195,7 +139,6 @@ func (a *Agent) spawnSubAgent(ctx context.Context, task string) (string, error) 
 		return fmt.Sprintf("Sub-agent failed: %v", err), nil
 	}
 
-	a.log.Add(fmt.Sprintf("Sub-agent completed: %s", truncate(result, 200)))
 	return fmt.Sprintf("Sub-agent result: %s", result), nil
 }
 
@@ -236,16 +179,4 @@ func (a *Agent) compact(ctx context.Context) {
 		{Role: "user", Content: originalUser},
 		{Role: "assistant", Content: resp.Content},
 	}
-}
-
-func (a *Agent) saveLog() error {
-	logContent := a.log.String()
-	return os.WriteFile("log.md", []byte(logContent), 0644)
-}
-
-func truncate(s string, n int) string {
-	if len(s) > n {
-		return s[:n] + "..."
-	}
-	return s
 }

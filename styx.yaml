@@ -24,9 +24,4 @@ api_key: ${STYX_API_KEY}
 model: nemotron-3.5-lightning-free
 max_context: 256000
 
-disable_regex: true
-
 max_working_time: 20m
-
-save_log: false
-send_log: false
