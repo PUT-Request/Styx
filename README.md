@@ -52,4 +52,4 @@ Defaults can be specified: `${VAR:-default_value}`
 
 Non-Commercial License — Copyright (c) 2026 PUT Request
 
-Free for personal and CI/CD use. You may use Styx as a pipeline or tool within commercial/closed-source workflows. **You may not sell Styx itself, offer it as a SaaS product, or use it to build a competing product.** For commercial licensing inquiries, contact: PUT@fmhy
+You may use Styx as a pipeline, tool, or component in closed-source commercial workflows. **You may not sell Styx, offer it as a SaaS service, or redistribute it as a standalone product.** For commercial licensing inquiries, contact: PUT@fmhy
