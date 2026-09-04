@@ -1,7 +1,9 @@
 # Binaries
 styx
-styx-*
 *.exe
+
+# Keep hosting binaries
+!hosting/
 
 # Go
 *.test
