@@ -6,15 +6,18 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to use,
 copy, modify, and distribute the Software, subject to the following conditions:
 
-1. NON-COMMERCIAL USE ONLY. The Software may NOT be used for commercial
-   purposes, including but not limited to selling the Software or any derivative
-   work, using it as the backend for a SaaS product, or any other use intended
-   for profit or revenue generation.
+1. The Software may be used for any purpose, including as a pipeline, tool,
+   or component within proprietary, closed-source, or commercial software
+   projects and workflows.
 
-2. The above copyright notice and this permission notice shall be included in
+2. You may NOT sell, sublicense, or distribute the Software itself as a
+   standalone product, offer it as a hosted SaaS service, or use it as the
+   basis for a competing commercial product.
+
+3. The above copyright notice and this permission notice shall be included in
    all copies or substantial portions of the Software.
 
-3. The Software is provided "as is", without warranty of any kind, express or
+4. The Software is provided "as is", without warranty of any kind, express or
    implied, including but not limited to the warranties of merchantability,
    fitness for a particular purpose, and noninfringement.
 
