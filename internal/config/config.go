@@ -24,6 +24,7 @@ type Config struct {
 	Model             string `yaml:"model"`
 	MaxContext        int    `yaml:"max_context"`
 	VerificationRegex string `yaml:"verification_regex"`
+	DisableRegex      bool   `yaml:"disable_regex"`
 	MaxWorkingTime    string `yaml:"max_working_time"`
 	SaveLog           bool   `yaml:"save_log"`
 	SendLog           bool   `yaml:"send_log"`
@@ -75,8 +76,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("model is required")
 	}
 
-	// Parse regex
-	if cfg.VerificationRegex != "" {
+	// Parse regex (only if not disabled)
+	if cfg.VerificationRegex != "" && !cfg.DisableRegex {
 		re, err := regexp.Compile(cfg.VerificationRegex)
 		if err != nil {
 			return nil, fmt.Errorf("invalid verification_regex: %w", err)
