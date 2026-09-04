@@ -1,0 +1,25 @@
+# Styx self-audit configuration
+prompt: |
+  Audit the Styx codebase for:
+  - Security vulnerabilities (hardcoded secrets, insecure defaults)
+  - Go best practices (error handling, race conditions, resource leaks)
+  - API compatibility issues
+  - Code quality and maintainability
+  
+  Check all Go files in internal/ and cmd/ directories.
+  Create a branch for any fixes found.
+  End with a summary of all issues discovered.
+
+mode: read_write
+
+api_endpoint: ${STYX_API_ENDPOINT}
+api_key: ${STYX_API_KEY}
+model: nemotron-3.5-lightning-free
+max_context: 256000
+
+verification_regex: "SUMMARY:.+"
+
+max_working_time: 20m
+
+save_log: true
+send_log: false

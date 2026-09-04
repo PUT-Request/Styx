@@ -1,0 +1,31 @@
+name: Styx Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Styx binary
+        run: |
+          curl -fsSL https://styx-44p.pages.dev/styx-linux-amd64 -o styx
+          chmod +x styx
+
+      - name: Run Styx self-audit
+        env:
+          STYX_API_ENDPOINT: ${{ secrets.STYX_API_ENDPOINT }}
+          STYX_API_KEY: ${{ secrets.STYX_API_KEY }}
+        run: ./styx --run styx.yaml
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: styx-audit-log
+          path: log.md
+          retention-days: 30
