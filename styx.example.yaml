@@ -1,0 +1,24 @@
+# Styx task configuration
+prompt: |
+  Review all Go files in this repository for common issues:
+  - Unhandled errors
+  - Race conditions
+  - Missing documentation on exported functions
+  
+  For each issue found, create a fix on a new branch.
+  Summarize all changes at the end.
+
+mode: read_write
+
+api_endpoint: ${STYX_API_ENDPOINT:-https://api.openai.com/v1}
+api_key: ${STYX_API_KEY}
+model: gpt-4o
+max_context: 128000
+
+verification_regex: "SUMMARY:.+issues?.+found"
+
+max_working_time: 30m
+
+save_log: true
+send_log: true
+webhook_url: ${STYX_DISCORD_WEBHOOK}
