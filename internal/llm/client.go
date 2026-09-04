@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"os"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
@@ -49,17 +51,24 @@ func NewClient(apiKey, endpoint, model string) *Client {
 func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Response, error) {
 	var lastErr error
 
-	backoff := time.Second
-	maxBackoff := 30 * time.Second
+	const maxAttempts = 6
+	backoff := 2 * time.Second
+	maxBackoff := 2 * time.Minute
 
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
+			jitter := time.Duration(float64(backoff) * (0.5 + rand.Float64()*0.5))
+			sleep := time.Duration(math.Min(float64(jitter), float64(maxBackoff)))
+
+			fmt.Fprintf(os.Stderr, "Retry %d/%d after %s (error: %v)\n", attempt, maxAttempts-1, sleep, lastErr)
+
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
-			case <-time.After(backoff):
-				backoff = time.Duration(math.Min(float64(backoff)*2, float64(maxBackoff)))
+			case <-time.After(sleep):
 			}
+
+			backoff = time.Duration(math.Min(float64(backoff)*2.5, float64(maxBackoff)))
 		}
 
 		resp, err := c.doChat(ctx, msgs, tools)
@@ -73,7 +82,7 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Respo
 		}
 	}
 
-	return nil, fmt.Errorf("after 5 attempts, last error: %w", lastErr)
+	return nil, fmt.Errorf("after %d attempts, last error: %w", maxAttempts, lastErr)
 }
 
 func (c *Client) doChat(ctx context.Context, msgs []Message, tools []Tool) (*Response, error) {
