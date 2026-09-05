@@ -134,6 +134,12 @@ func (a *Agent) spawnSubAgent(ctx context.Context, task string) (string, error) 
 		isSub:    true,
 	}
 
+	systemPrompt := prompt.BuildSystem(sub.cfg)
+	sub.msgs = []llm.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: prompt.BuildUserPrompt()},
+	}
+
 	result, err := sub.loop(ctx)
 	if err != nil {
 		return fmt.Sprintf("Sub-agent failed: %v", err), nil
