@@ -115,12 +115,17 @@ func (fm *FileManager) Read(path string) (string, error) {
 	return string(data), nil
 }
 
+// WritePermission is the default file permission used by FileManager.Write.
+// 0600 (owner read/write only) is recommended for security to avoid
+// exposing sensitive data to other users on shared systems.
+const WritePermission = 0600
+
 func (fm *FileManager) Write(path, content string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
-	return os.WriteFile(path, []byte(content), 0644)
+	return os.WriteFile(path, []byte(content), WritePermission)
 }
 
 type BashExecutor struct {
@@ -131,11 +136,32 @@ func NewBashExecutor(timeout time.Duration) *BashExecutor {
 	return &BashExecutor{timeout: timeout}
 }
 
+// splitCommand splits a command string into arguments safely.
+// It avoids shell injection by not using sh -c with untrusted input.
+// For simple commands without complex shell features, it directly
+// executes the binary with arguments.
+func splitCommand(cmd string) []string {
+	// Simple splitting on spaces - for more complex cases,
+	// users should provide commands as arrays via appropriate mechanisms
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return nil
+	}
+	return parts
+}
+
 func (be *BashExecutor) Run(command string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), be.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	// Use exec.CommandContext with explicit args for safer execution
+	// We split on whitespace for simple commands
+	args := splitCommand(command)
+	if len(args) == 0 {
+		return "", fmt.Errorf("empty command")
+	}
+
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Env = os.Environ()
 	out, err := cmd.CombinedOutput()
 	result := string(out)
