@@ -37,17 +37,43 @@ func New(cfg *config.Config) *Agent {
 	}
 }
 
+// appendMsg appends a message to the agent's message history with proper mutex locking.
+func (a *Agent) appendMsg(msg llm.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.msgs = append(a.msgs, msg)
+}
+
+// getMsgs returns a copy of the current message history.
+func (a *Agent) getMsgs() []llm.Message {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	result := make([]llm.Message, len(a.msgs))
+	copy(result, a.msgs)
+	return result
+}
+
+// setMsgs replaces the message history with a new slice (with mutex protection).
+func (a *Agent) setMsgs(msgs []llm.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.msgs = msgs
+}
+
 func (a *Agent) Run(ctx context.Context) (string, error) {
 	a.startTime = time.Now()
 
 	ctx, cancel := context.WithTimeout(ctx, a.cfg.MaxDuration)
 	defer cancel()
 
-	systemPrompt := prompt.BuildSystem(a.cfg)
-	a.msgs = []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: prompt.BuildUserPrompt()},
-	}
+	a.appendMsg(llm.Message{
+		Role:    "system",
+		Content: prompt.BuildSystem(a.cfg),
+	})
+	a.appendMsg(llm.Message{
+		Role:    "user",
+		Content: prompt.BuildUserPrompt(),
+	})
 
 	result, err := a.loop(ctx)
 	if err != nil {
@@ -72,11 +98,14 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 		default:
 		}
 
-		if a.shouldCompact() {
-			a.compact(ctx)
+		// Use a copy of messages to avoid race conditions with compact()
+		msgsCopy := a.getMsgs()
+
+		if a.shouldCompact(msgsCopy) {
+			a.compact(ctx, msgsCopy)
 		}
 
-		resp, err := a.client.Chat(ctx, a.msgs, toolDefs)
+		resp, err := a.client.Chat(ctx, msgsCopy, toolDefs)
 		if err != nil {
 			return "", fmt.Errorf("LLM error: %w", err)
 		}
@@ -88,7 +117,7 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 		if len(resp.ToolCalls) > 0 {
 			assistantMsg.ToolCalls = resp.ToolCalls
 		}
-		a.msgs = append(a.msgs, assistantMsg)
+		a.appendMsg(assistantMsg)
 
 		if len(resp.ToolCalls) == 0 {
 			return resp.Content, nil
@@ -100,7 +129,7 @@ func (a *Agent) loop(ctx context.Context) (string, error) {
 				result = fmt.Sprintf("ERROR: %v", err)
 			}
 
-			a.msgs = append(a.msgs, llm.Message{
+			a.appendMsg(llm.Message{
 				Role:       "tool",
 				Content:    result,
 				ToolCallID: tc.ID,
@@ -123,22 +152,37 @@ func (a *Agent) executeTool(ctx context.Context, tc llm.ToolCall) (string, error
 }
 
 func (a *Agent) spawnSubAgent(ctx context.Context, task string) (string, error) {
+	// Check if context is already done
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("context already done: %w", ctx.Err())
+	}
+
 	subCfg := *a.cfg
 	subCfg.Prompt = task
+
+	// Create a new registry for the sub-agent to avoid shared mutable state
+	subTodoMgr := tools.NewTodoManager()
+	subFileMgr := tools.NewFileManager()
+	subBashExec := tools.NewBashExecutor(5 * time.Minute)
+	subRegistry := tools.NewToolRegistry(subTodoMgr, subFileMgr, subBashExec, string(subCfg.Mode))
 
 	sub := &Agent{
 		cfg:      &subCfg,
 		client:   a.client,
-		registry: a.registry,
-		todoMgr:  a.todoMgr,
+		registry: subRegistry,
+		todoMgr:  subTodoMgr,
 		isSub:    true,
 	}
 
 	systemPrompt := prompt.BuildSystem(sub.cfg)
-	sub.msgs = []llm.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: prompt.BuildUserPrompt()},
-	}
+	sub.appendMsg(llm.Message{
+		Role:    "system",
+		Content: systemPrompt,
+	})
+	sub.appendMsg(llm.Message{
+		Role:    "user",
+		Content: prompt.BuildUserPrompt(),
+	})
 
 	result, err := sub.loop(ctx)
 	if err != nil {
@@ -148,24 +192,30 @@ func (a *Agent) spawnSubAgent(ctx context.Context, task string) (string, error) 
 	return fmt.Sprintf("Sub-agent result: %s", result), nil
 }
 
-func (a *Agent) shouldCompact() bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+func (a *Agent) shouldCompact(msgs []llm.Message) bool {
 	total := 0
-	for _, m := range a.msgs {
+	for _, m := range msgs {
 		total += len(m.Content)
 	}
 	maxChars := a.cfg.MaxContext * 3
 	return total > int(float64(maxChars)*0.9)
 }
 
-func (a *Agent) compact(ctx context.Context) {
+func (a *Agent) compact(ctx context.Context, _ []llm.Message) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	// Double-check we have enough messages
+	if len(a.msgs) < 2 {
+		a.mu.Unlock()
+		return
+	}
 
 	systemPrompt := a.msgs[0].Content
 	originalUser := a.msgs[1].Content
 
+	// We have the messages under the lock, release it before calling LLM
+	a.mu.Unlock()
+
+	// Build compacted messages - use a copy since we released the lock
 	msgs := append([]llm.Message{}, a.msgs...)
 	msgs = append(msgs, llm.Message{
 		Role:    "user",
@@ -180,9 +230,11 @@ func (a *Agent) compact(ctx context.Context) {
 		return
 	}
 
+	a.mu.Lock()
 	a.msgs = []llm.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: originalUser},
 		{Role: "assistant", Content: resp.Content},
 	}
+	a.mu.Unlock()
 }
