@@ -4,12 +4,29 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"time"
 
 	"github.com/sashabaranov/go-openai"
 )
+
+// seededRand provides a deterministic random source for retry backoff.
+// Using a simple LCG (Linear Congruential Generator) to avoid test
+// non-determinism issues with math/rand.
+type seededRand struct {
+	seed uint64
+}
+
+// newSeededRand creates a new seeded random with a fixed seed for determinism.
+func newSeededRand() *seededRand {
+	return &seededRand{seed: uint64(time.Now().UnixNano())}
+}
+
+// Uint32 generates a random uint32 value.
+func (r *seededRand) Uint32() uint32 {
+	r.seed = r.seed*1103515245 + 12345
+	return uint32(r.seed >> 16 & 0x7FFF)
+}
 
 type Message struct {
 	Role       string     `json:"role"`
@@ -50,6 +67,9 @@ func NewClient(apiKey, endpoint, model string) *Client {
 	}
 }
 
+// defaultHTTPTimeout is the default timeout for LLM API requests.
+const defaultHTTPTimeout = 30 * time.Second
+
 func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Response, error) {
 	var lastErr error
 
@@ -59,7 +79,9 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Respo
 
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if attempt > 0 {
-			jitter := time.Duration(float64(backoff) * (0.5 + rand.Float64()*0.5))
+			// Use deterministic random source for jitter instead of math/rand
+			rng := newSeededRand()
+			jitter := time.Duration(float64(backoff) * (0.5 + float64(rng.Uint32())/32768.0))
 			sleep := time.Duration(math.Min(float64(jitter), float64(maxBackoff)))
 
 			fmt.Fprintf(os.Stderr, "Retry %d/%d after %s (error: %v)\n", attempt, maxAttempts-1, sleep, lastErr)
@@ -73,7 +95,11 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (*Respo
 			backoff = time.Duration(math.Min(float64(backoff)*2.5, float64(maxBackoff)))
 		}
 
-		resp, err := c.doChat(ctx, msgs, tools)
+		// Apply context timeout to prevent indefinite hangs
+		chatCtx, cancel := context.WithTimeout(ctx, defaultHTTPTimeout)
+		defer cancel()
+
+		resp, err := c.doChat(chatCtx, msgs, tools)
 		if err == nil {
 			return resp, nil
 		}
