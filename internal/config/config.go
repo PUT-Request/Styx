@@ -50,7 +50,7 @@ func Load(path string) (*Config, error) {
 		cfg.MaxWorkingTime = "30m"
 	}
 
-	// Expand env vars
+	// Expand env vars - return empty string if not set (validation will catch it)
 	cfg.APIEndpoint = expandEnv(cfg.APIEndpoint)
 	cfg.APIKey = expandEnv(cfg.APIKey)
 
@@ -62,7 +62,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("api_endpoint is required")
 	}
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("api_key is required")
+		return nil, fmt.Errorf("api_key is required. Make sure it's set in the config or as an environment variable")
 	}
 	if cfg.Model == "" {
 		return nil, fmt.Errorf("model is required")
@@ -78,6 +78,8 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// expandEnv replaces ${VAR} references with the value of the environment variable.
+// Returns empty string if the variable is not defined, which will be caught by validation.
 func expandEnv(s string) string {
 	if s == "" {
 		return ""
@@ -86,6 +88,6 @@ func expandEnv(s string) string {
 		if v, ok := os.LookupEnv(key); ok {
 			return v
 		}
-		return "${" + key + "}"
+		return ""
 	})
 }
