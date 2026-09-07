@@ -153,6 +153,10 @@ type ToolRegistry struct {
 	todos *TodoManager
 	files *FileManager
 	bash  *BashExecutor
+	grep  *GrepTool
+	find  *FindFilesTool
+	diff  *GitDiffTool
+	edit  *EditFileTool
 	mode  string
 }
 
@@ -161,6 +165,10 @@ func NewToolRegistry(todos *TodoManager, files *FileManager, bash *BashExecutor,
 		todos: todos,
 		files: files,
 		bash:  bash,
+		grep:  &GrepTool{},
+		find:  &FindFilesTool{},
+		diff:  &GitDiffTool{},
+		edit:  &EditFileTool{},
 		mode:  mode,
 	}
 }
@@ -257,7 +265,7 @@ func (tr *ToolRegistry) buildTools(includeSpawn bool) []llm.Tool {
 	if includeSpawn {
 		tools = append(tools, llm.Tool{
 			Name:        "spawn_agent",
-			Description: "Spawn a sub-agent to handle a specific task. Sub-agents cannot spawn further sub-agents. Returns the agent's final result.",
+			Description: "Spawn a sub-agent to handle a specific task. Sub-agents cannot spawn further sub-agents. Returns the agent\u2019s final result.",
 			Schema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -272,25 +280,136 @@ func (tr *ToolRegistry) buildTools(includeSpawn bool) []llm.Tool {
 	}
 
 	if tr.mode == "read_write" {
-		tools = append(tools, llm.Tool{
-			Name:        "write_file",
-			Description: "Write content to a file. Creates directories if needed.",
+		tools = append(tools, []llm.Tool{
+			{
+				Name:        "write_file",
+				Description: "Write content to a file. Creates directories if needed.",
+				Schema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"path": map[string]interface{}{
+							"type":        "string",
+							"description": "Absolute or relative path to the file",
+						},
+						"content": map[string]interface{}{
+							"type":        "string",
+							"description": "The content to write",
+						},
+					},
+					"required": []string{"path", "content"},
+				},
+			},
+			{
+				Name:        "edit_file",
+				Description: "Perform a surgical text replacement in a file. Provide the exact old text and the new text to replace it with.",
+				Schema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"path": map[string]interface{}{
+							"type":        "string",
+							"description": "File path to edit",
+						},
+						"old_text": map[string]interface{}{
+							"type":        "string",
+							"description": "Exact text to find and replace",
+						},
+						"new_text": map[string]interface{}{
+							"type":        "string",
+							"description": "Replacement text",
+						},
+					},
+					"required": []string{"path", "old_text", "new_text"},
+				},
+			},
+			{
+				Name:        "insert_at_line",
+				Description: "Insert text at a specific line number in a file.",
+				Schema: map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"path": map[string]interface{}{
+							"type":        "string",
+							"description": "File path to edit",
+						},
+						"line": map[string]interface{}{
+							"type":        "integer",
+							"description": "Line number to insert at (1-indexed)",
+						},
+						"text": map[string]interface{}{
+							"type":        "string",
+							"description": "Text to insert",
+						},
+					},
+					"required": []string{"path", "line", "text"},
+				},
+			},
+		}...)
+	}
+
+	// Search tools (always available)
+	tools = append(tools, []llm.Tool{
+		{
+			Name:        "grep",
+			Description: "Search file contents for a regex pattern. Returns matching lines with file and line number.",
 			Schema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
+					"pattern": map[string]interface{}{
+						"type":        "string",
+						"description": "Regex pattern to search for",
+					},
 					"path": map[string]interface{}{
 						"type":        "string",
-						"description": "Absolute or relative path to the file",
+						"description": "Directory or file to search in (default: current directory)",
 					},
-					"content": map[string]interface{}{
+					"glob": map[string]interface{}{
 						"type":        "string",
-						"description": "The content to write",
+						"description": "File glob pattern to filter (e.g., *.go)",
+					},
+					"ignore_case": map[string]interface{}{
+						"type":        "boolean",
+						"description": "Case-insensitive search (default: false)",
 					},
 				},
-				"required": []string{"path", "content"},
+				"required": []string{"pattern"},
 			},
-		})
-	}
+		},
+		{
+			Name:        "find_files",
+			Description: "Find files matching a glob pattern. Returns list of matching file paths.",
+			Schema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"pattern": map[string]interface{}{
+						"type":        "string",
+						"description": "Glob pattern (e.g., **/*.go, src/**/*.ts)",
+					},
+					"path": map[string]interface{}{
+						"type":        "string",
+						"description": "Root directory to search from (default: current directory)",
+					},
+				},
+				"required": []string{"pattern"},
+			},
+		},
+		{
+			Name:        "git_diff",
+			Description: "Get git diff output. Use ref \"working\" for unstaged, \"staged\" for staged, or a commit SHA/branch.",
+			Schema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"ref": map[string]interface{}{
+						"type":        "string",
+						"description": "Git ref to diff against (default: working tree)",
+					},
+					"path": map[string]interface{}{
+						"type":        "string",
+						"description": "Specific file path to diff",
+					},
+				},
+			},
+		},
+	}...)
 
 	return tools
 }
@@ -357,6 +476,65 @@ func (tr *ToolRegistry) Execute(name string, args json.RawMessage) (string, erro
 			return "", err
 		}
 		return tr.bash.Run(p.Command)
+
+	case "grep":
+		var p struct {
+			Pattern    string `json:"pattern"`
+			Path       string `json:"path"`
+			Glob       string `json:"glob"`
+			IgnoreCase bool   `json:"ignore_case"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", err
+		}
+		return tr.grep.Execute(p.Pattern, p.Path, p.Glob, p.IgnoreCase)
+
+	case "find_files":
+		var p struct {
+			Pattern string `json:"pattern"`
+			Path    string `json:"path"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", err
+		}
+		return tr.find.Execute(p.Pattern, p.Path)
+
+	case "git_diff":
+		var p struct {
+			Ref  string `json:"ref"`
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", err
+		}
+		return tr.diff.Execute(p.Ref, p.Path)
+
+	case "edit_file":
+		var p struct {
+			Path    string `json:"path"`
+			OldText string `json:"old_text"`
+			NewText string `json:"new_text"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", err
+		}
+		result, err := tr.edit.Execute(p.Path, p.OldText, p.NewText)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Edited %s: %d replacements, ~%d lines changed", result.Path, result.Replacements, result.LinesChanged), nil
+
+	case "insert_at_line":
+		var p struct {
+			Path string `json:"path"`
+			Line int    `json:"line"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", err
+		}
+		insertTool := &InsertFileTool{}
+		return insertTool.Execute(p.Path, p.Line, p.Text)
 
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)

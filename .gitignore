@@ -2,6 +2,10 @@
 styx
 *.exe
 
+# Keep cmd directory
+!cmd/
+!cmd/styx/
+
 # Keep hosting binaries
 !hosting/
 
